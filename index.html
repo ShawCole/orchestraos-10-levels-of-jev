@@ -51,6 +51,12 @@
       border: 1px solid rgba(20, 184, 166, 0.35);
       box-shadow: 0 0 30px rgba(20, 184, 166, 0.2);
     }
+    .level-tab.active {
+      background: linear-gradient(135deg, rgba(20, 184, 166, 0.25), rgba(6, 182, 212, 0.25));
+      border-color: #14b8a6;
+      color: #ffffff;
+      box-shadow: 0 0 15px rgba(20, 184, 166, 0.3);
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-brand-500 selection:text-white">
@@ -179,7 +185,7 @@
     <!-- FULLY FUNCTIONAL INTERACTIVE SIMULATOR STUDIO -->
     <section id="simulator" class="py-16 bg-slate-900/60 border-y border-slate-900">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="mb-10 text-center max-w-3xl mx-auto">
+        <div class="mb-8 text-center max-w-3xl mx-auto">
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20 mb-3">
             <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
             <span>Interactive Fleet Simulator Studio</span>
@@ -188,8 +194,15 @@
             Live Jev Decision Simulator (Levels 1 - 10)
           </h2>
           <p class="text-slate-400 text-sm mt-2">
-            Choose any level, adjust the reactive parameters, and watch the Jev decision engine recalculate weights, confidence, and JSON outputs in real-time.
+            Click any level pill below or use the dropdown to switch the interactive studio controls in real-time.
           </p>
+        </div>
+
+        <!-- LEVEL PILL SELECTOR TABS -->
+        <div class="mb-8 overflow-x-auto pb-2 scrollbar-none">
+          <div class="flex items-center justify-start lg:justify-center gap-2 min-w-max px-2" id="levelTabsContainer">
+            <!-- Rendered dynamically -->
+          </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -197,8 +210,11 @@
           <!-- Controls Panel (Left) -->
           <div class="lg:col-span-5 glass-panel p-6 rounded-2xl space-y-6">
             <div>
-              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Select OrchestraOS Level</label>
-              <select id="simLevel" onchange="switchLevel()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-brand-500 font-semibold">
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Active Level Selection</label>
+                <span id="currentLevelBadge" class="text-xs font-mono font-bold text-brand-400 bg-brand-500/10 px-2.5 py-0.5 rounded border border-brand-500/30">LEVEL 3</span>
+              </div>
+              <select id="simLevel" onchange="selectLevel(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-brand-500 font-semibold cursor-pointer">
                 <option value="1">Level 1: Fast Swap Precondition Gate (Boolean)</option>
                 <option value="2">Level 2: Fleet Message Intent Triage (Multi-Choice)</option>
                 <option value="3" selected>Level 3: Blue-Green Rotation Risk Scoring (Composite)</option>
@@ -212,7 +228,7 @@
               </select>
             </div>
 
-            <!-- Dynamic Interactive Controls Container -->
+            <!-- Dynamic Interactive Controls Container (Sliders & Toggles) -->
             <div id="simDynamicControls" class="space-y-4">
               <!-- Rendered dynamically for each level -->
             </div>
@@ -317,7 +333,7 @@
           </div>
           <h3 class="text-base font-bold text-white mb-2">Multi-Factor Blue-Green Rotation Scoring</h3>
           <p class="text-xs text-slate-300 leading-relaxed mb-4">
-            Calculates a weighted composite risk score ($0.0 - 1.0$) evaluating: context window saturation (40%), git uncommitted diff churn (25%), idle duration (20%), and active subagents (15%). Safely schedules rotation before memory starvation.
+            Calculates a weighted composite risk score ($0.0 - 1.0$) evaluating: context window saturation (tiered with accelerated 70-80% and critical >80% override), git uncommitted diff churn, idle duration, and active subagents.
           </p>
           <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-400">
             <span class="text-accent-purple">Target:</span> <code>rotation_autonomy.py</code><br/>
@@ -464,8 +480,37 @@
 
     const CORRECT_PASSWORDS = ["orchestra2026", "viorel2026", "orchestra", "jev2026"];
 
-    // Auto-unlock via URL param (?p=orchestra2026 or ?pass=orchestra2026) or localStorage
+    const LEVEL_METADATA = [
+      { id: 1, title: "L1: Preconditions", desc: "Fast Boolean Gate" },
+      { id: 2, title: "L2: Triage", desc: "Intent Routing" },
+      { id: 3, title: "L3: Rotation Risk", desc: "Composite Scoring" },
+      { id: 4, title: "L4: Confidence", desc: "Destructive Gate" },
+      { id: 5, title: "L5: Router", desc: "Multi-Runtime" },
+      { id: 6, title: "L6: Tmux Guard", desc: "Syntax Sanitizer" },
+      { id: 7, title: "L7: Compaction", desc: "Memory Guard" },
+      { id: 8, title: "L8: Cheap Reads", desc: "Token Minimizer" },
+      { id: 9, title: "L9: Fleet Scale", desc: "14-Seat Audit" },
+      { id: 10, title: "L10: Self-Heal", desc: "Consensus Resolver" }
+    ];
+
+    // STATE STORE FOR ALL 10 LEVELS (Fully Populated with interactive sliders/parameters)
+    const STATE = {
+      1: { pidHeartbeat: 450, walDelta: 0, huskAge: 0, diskHeadroomGB: 42 },
+      2: { preset: "vote_req", customText: "", urgencyScore: 8 },
+      3: { contextSat: 74, gitChurn: 140, idleSec: 310, subagents: 0 },
+      4: { op: "tmux_repin", confidence: 0.84, threshold: 0.92 },
+      5: { complexity: 4, tokenWindow: 64 },
+      6: { targetSuffix: 1, collisionDetected: true },
+      7: { tokenUsage: 182, uncompactedTurns: 28 },
+      8: { fileCount: 48, avgLines: 1200 },
+      9: { huskDetected: 0, deadSocket: 0, driftCount: 0 },
+      10: { quorumHealthPct: 66, deadlockTimeoutSec: 45, deadVoterActive: true }
+    };
+
+    let currentLevel = 3;
+
     window.addEventListener("DOMContentLoaded", () => {
+      renderLevelTabs();
       const urlParams = new URLSearchParams(window.location.search);
       const urlPass = urlParams.get('p') || urlParams.get('pass');
       const savedPass = localStorage.getItem("orchestra_jev_auth");
@@ -473,7 +518,7 @@
       if (CORRECT_PASSWORDS.includes(urlPass) || CORRECT_PASSWORDS.includes(savedPass)) {
         unlockView();
       }
-      switchLevel();
+      selectLevel(3);
     });
 
     function handleUnlock(e) {
@@ -496,28 +541,39 @@
         gate.style.display = 'none';
         content.classList.remove('opacity-0');
         content.classList.add('opacity-100');
-        switchLevel();
+        selectLevel(currentLevel);
       }, 300);
     }
 
-    // STATE STORE FOR ALL 10 LEVELS
-    const STATE = {
-      1: { pidLive: true, walDrained: true, huskClean: true, diskHeadroom: true },
-      2: { preset: "vote_req", customText: "" },
-      3: { contextSat: 88, gitChurn: 140, idleSec: 310, subagents: 0 },
-      4: { op: "tmux_repin", confidence: 0.84, threshold: 0.92 },
-      5: { complexity: 4, tokenWindow: 64, strictLatency: false },
-      6: { command: "tmux kill-session -t P-g1" },
-      7: { tokenUsage: 182, uncompactedTurns: 28 },
-      8: { fileCount: 48, avgLines: 1200 },
-      9: { huskDetected: 0, deadSocket: 0, driftCount: 0 },
-      10: { voter1: "APPROVE", voter2: "TIMEOUT_DEAD", voter3: "APPROVE" }
-    };
+    function renderLevelTabs() {
+      const container = document.getElementById("levelTabsContainer");
+      container.innerHTML = LEVEL_METADATA.map(m => `
+        <button onclick="selectLevel(${m.id})" id="tab_btn_${m.id}" class="level-tab px-3.5 py-2 rounded-xl border border-slate-800 bg-slate-900/80 hover:bg-slate-800 text-xs text-slate-300 font-semibold transition flex flex-col items-center min-w-[110px]">
+          <span class="text-[11px] font-mono text-brand-400">${m.title}</span>
+          <span class="text-[9px] text-slate-400">${m.desc}</span>
+        </button>
+      `).join("");
+    }
 
-    function switchLevel() {
-      const lvl = parseInt(document.getElementById("simLevel").value);
-      renderLevelControls(lvl);
-      evaluateLevel(lvl);
+    function selectLevel(lvl) {
+      currentLevel = parseInt(lvl);
+      document.getElementById("simLevel").value = currentLevel;
+      document.getElementById("currentLevelBadge").innerText = `LEVEL ${currentLevel}`;
+
+      // Update active tab styles
+      LEVEL_METADATA.forEach(m => {
+        const btn = document.getElementById(`tab_btn_${m.id}`);
+        if (btn) {
+          if (m.id === currentLevel) {
+            btn.className = "level-tab active px-3.5 py-2 rounded-xl border text-xs font-semibold transition flex flex-col items-center min-w-[110px]";
+          } else {
+            btn.className = "level-tab px-3.5 py-2 rounded-xl border border-slate-800 bg-slate-900/80 hover:bg-slate-800 text-xs text-slate-300 font-semibold transition flex flex-col items-center min-w-[110px]";
+          }
+        }
+      });
+
+      renderLevelControls(currentLevel);
+      evaluateLevel(currentLevel);
     }
 
     function renderLevelControls(lvl) {
@@ -525,38 +581,64 @@
 
       if (lvl === 1) {
         container.innerHTML = `
-          <div class="space-y-3">
-            <div class="text-xs font-semibold text-slate-300">Swap Precondition Checks (Boolean):</div>
-            <label class="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer">
-              <span class="text-xs text-slate-200">Canonical PID Live in tmux</span>
-              <input type="checkbox" id="chk_pid" ${STATE[1].pidLive ? 'checked' : ''} onchange="STATE[1].pidLive = this.checked; evaluateLevel(1);" class="w-4 h-4 accent-brand-500">
-            </label>
-            <label class="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer">
-              <span class="text-xs text-slate-200">WAL Delta Drained to Zero</span>
-              <input type="checkbox" id="chk_wal" ${STATE[1].walDrained ? 'checked' : ''} onchange="STATE[1].walDrained = this.checked; evaluateLevel(1);" class="w-4 h-4 accent-brand-500">
-            </label>
-            <label class="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer">
-              <span class="text-xs text-slate-200">Husk Session Lock Reaped</span>
-              <input type="checkbox" id="chk_husk" ${STATE[1].huskClean ? 'checked' : ''} onchange="STATE[1].huskClean = this.checked; evaluateLevel(1);" class="w-4 h-4 accent-brand-500">
-            </label>
-            <label class="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer">
-              <span class="text-xs text-slate-200">Disk Space Headroom (>10GB)</span>
-              <input type="checkbox" id="chk_disk" ${STATE[1].diskHeadroom ? 'checked' : ''} onchange="STATE[1].diskHeadroom = this.checked; evaluateLevel(1);" class="w-4 h-4 accent-brand-500">
-            </label>
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Canonical PID Heartbeat</span>
+                <span id="lbl_l1_hb" class="text-brand-400 font-mono font-bold">${STATE[1].pidHeartbeat} ms</span>
+              </div>
+              <input type="range" min="100" max="4000" step="50" value="${STATE[1].pidHeartbeat}" class="w-full accent-brand-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[1].pidHeartbeat = parseInt(this.value); document.getElementById('lbl_l1_hb').innerText = this.value + ' ms'; evaluateLevel(1);">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
+                <span class="text-emerald-400">&lt;2000ms (Alive)</span>
+                <span class="text-rose-400">&gt;2000ms (Dead PID Hazard)</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>WAL Delta Queue Depth</span>
+                <span id="lbl_l1_wal" class="text-accent-cyan font-mono font-bold">${STATE[1].walDelta} records</span>
+              </div>
+              <input type="range" min="0" max="50" value="${STATE[1].walDelta}" class="w-full accent-accent-cyan h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[1].walDelta = parseInt(this.value); document.getElementById('lbl_l1_wal').innerText = this.value + ' records'; evaluateLevel(1);">
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Husk Session Lock Age</span>
+                <span id="lbl_l1_husk" class="text-accent-purple font-mono font-bold">${STATE[1].huskAge} sec</span>
+              </div>
+              <input type="range" min="0" max="300" step="10" value="${STATE[1].huskAge}" class="w-full accent-accent-purple h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[1].huskAge = parseInt(this.value); document.getElementById('lbl_l1_husk').innerText = this.value + ' sec'; evaluateLevel(1);">
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Available NVMe Headroom</span>
+                <span id="lbl_l1_disk" class="text-accent-amber font-mono font-bold">${STATE[1].diskHeadroomGB} GB</span>
+              </div>
+              <input type="range" min="2" max="100" value="${STATE[1].diskHeadroomGB}" class="w-full accent-accent-amber h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[1].diskHeadroomGB = parseInt(this.value); document.getElementById('lbl_l1_disk').innerText = this.value + ' GB'; evaluateLevel(1);">
+            </div>
           </div>
         `;
       } else if (lvl === 2) {
         container.innerHTML = `
-          <div class="space-y-3">
-            <label class="block text-xs font-semibold text-slate-400">Incoming Message Preset</label>
-            <select id="sel_msg_preset" onchange="handleLvl2Preset(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white">
-              <option value="vote_req" selected>Vote Request: DEC-1791255540404633 (port #178 menu-identity gate)</option>
-              <option value="outage">OUTAGE: Gateway socket 9091 refusing connections on srv1397016</option>
-              <option value="shaw_answer">Shaw Menu Submit: Option 1 approved from Quest headset</option>
-              <option value="telemetry">Heartbeat telemetry: seat gemini-pm-adaptiv idle 180s</option>
-            </select>
-            <label class="block text-xs font-semibold text-slate-400 mt-2">Or Type Inbound Text Live:</label>
-            <input type="text" id="inp_custom_msg" placeholder="Type message to test live intent triage..." oninput="handleLvl2Custom(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Inbound Fleet Signal Preset</label>
+              <select id="sel_msg_preset" onchange="handleLvl2Preset(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white">
+                <option value="vote_req" ${STATE[2].preset === 'vote_req' ? 'selected' : ''}>Vote Request: DEC-1791255540404633 (port #178 menu-identity gate)</option>
+                <option value="outage" ${STATE[2].preset === 'outage' ? 'selected' : ''}>OUTAGE: Gateway socket 9091 refusing connections on srv1397016</option>
+                <option value="shaw_answer" ${STATE[2].preset === 'shaw_answer' ? 'selected' : ''}>Shaw Menu Submit: Option 1 approved from Quest headset</option>
+                <option value="telemetry" ${STATE[2].preset === 'telemetry' ? 'selected' : ''}>Heartbeat telemetry: seat gemini-pm-adaptiv idle 180s</option>
+              </select>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Signal Urgency Priority</span>
+                <span id="lbl_l2_urg" class="text-rose-400 font-mono font-bold">Priority ${STATE[2].urgencyScore}/10</span>
+              </div>
+              <input type="range" min="1" max="10" value="${STATE[2].urgencyScore}" class="w-full accent-rose-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[2].urgencyScore = parseInt(this.value); document.getElementById('lbl_l2_urg').innerText = 'Priority ' + this.value + '/10'; evaluateLevel(2);">
+            </div>
           </div>
         `;
       } else if (lvl === 3) {
@@ -574,7 +656,7 @@
               <div class="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
                 <span>&lt;70% (Baseline)</span>
                 <span class="text-amber-400 font-semibold">70-80% (Elevated)</span>
-                <span class="text-rose-400 font-semibold">&gt;80% (Critical High Weight)</span>
+                <span class="text-rose-400 font-semibold">&gt;80% (Critical Override)</span>
               </div>
             </div>
             <div>
@@ -604,11 +686,11 @@
         container.innerHTML = `
           <div class="space-y-4">
             <div>
-              <label class="block text-xs font-semibold text-slate-400 mb-1">High-Risk Operation</label>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Target Operation</label>
               <select id="sel_op" onchange="STATE[4].op = this.value; evaluateLevel(4);" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white">
-                <option value="tmux_repin">execute_tmux_repin() (Kill old blue & switch pane)</option>
-                <option value="reap_grandchild">reap_grandchild() (Kill detached subagent tree)</option>
-                <option value="wal_purge">purge_wal_history() (Irreversible log truncate)</option>
+                <option value="tmux_repin" ${STATE[4].op === 'tmux_repin' ? 'selected' : ''}>execute_tmux_repin() (Kill old blue & swap pane)</option>
+                <option value="reap_grandchild" ${STATE[4].op === 'reap_grandchild' ? 'selected' : ''}>reap_grandchild() (Kill detached subagent tree)</option>
+                <option value="wal_purge" ${STATE[4].op === 'wal_purge' ? 'selected' : ''}>purge_wal_history() (Irreversible log truncate)</option>
               </select>
             </div>
             <div>
@@ -653,12 +735,21 @@
         `;
       } else if (lvl === 6) {
         container.innerHTML = `
-          <div class="space-y-3">
-            <label class="block text-xs font-semibold text-slate-400">Agent Shell Command Input</label>
-            <input type="text" id="inp_cmd" value="${STATE[6].command}" oninput="STATE[6].command = this.value; evaluateLevel(6);" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-brand-300">
-            <div class="flex flex-wrap gap-2 pt-1">
-              <button onclick="document.getElementById('inp_cmd').value = 'tmux kill-session -t P-g1'; STATE[6].command = 'tmux kill-session -t P-g1'; evaluateLevel(6);" class="text-[11px] font-mono px-2.5 py-1 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-700 text-slate-300">Preset: Prefix Collide (-t P-g1)</button>
-              <button onclick="document.getElementById('inp_cmd').value = 'tmux swap-pane -t =quest-orchestra'; STATE[6].command = 'tmux swap-pane -t =quest-orchestra'; evaluateLevel(6);" class="text-[11px] font-mono px-2.5 py-1 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-700 text-slate-300">Preset: Exact Safe (-t =quest-orchestra)</button>
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Tmux Target Agent Index</span>
+                <span id="lbl_l6_idx" class="text-brand-400 font-mono font-bold">P-g${STATE[6].targetSuffix}</span>
+              </div>
+              <input type="range" min="1" max="14" value="${STATE[6].targetSuffix}" class="w-full accent-brand-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[6].targetSuffix = parseInt(this.value); document.getElementById('lbl_l6_idx').innerText = 'P-g' + this.value; evaluateLevel(6);">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
+                <span class="text-rose-400 font-semibold">P-g1 (Collides with P-g10..14)</span>
+                <span>P-g10..14</span>
+              </div>
+            </div>
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs">
+              <span class="text-slate-500">Simulated Raw Call:</span>
+              <div class="text-rose-400 font-semibold">tmux kill-session -t P-g${STATE[6].targetSuffix}</div>
             </div>
           </div>
         `;
@@ -702,42 +793,39 @@
         `;
       } else if (lvl === 9) {
         container.innerHTML = `
-          <div class="space-y-3">
-            <div class="text-xs font-semibold text-slate-300">Fleet Anomaly Simulator (14 Seats):</div>
-            <div class="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800">
-              <span class="text-xs text-slate-200">Zombie Husk Sessions</span>
-              <input type="number" min="0" max="5" value="${STATE[9].huskDetected}" onchange="STATE[9].huskDetected = parseInt(this.value); evaluateLevel(9);" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-white">
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Zombie Husk Sessions</span>
+                <span id="lbl_l9_husk" class="text-rose-400 font-mono font-bold">${STATE[9].huskDetected} husks</span>
+              </div>
+              <input type="range" min="0" max="5" value="${STATE[9].huskDetected}" class="w-full accent-rose-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[9].huskDetected = parseInt(this.value); document.getElementById('lbl_l9_husk').innerText = this.value + ' husks'; evaluateLevel(9);">
             </div>
-            <div class="flex items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800">
-              <span class="text-xs text-slate-200">Stale/Dead Socket Listeners</span>
-              <input type="number" min="0" max="3" value="${STATE[9].deadSocket}" onchange="STATE[9].deadSocket = parseInt(this.value); evaluateLevel(9);" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-white">
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Dead/Stale Port Listeners</span>
+                <span id="lbl_l9_dead" class="text-accent-amber font-mono font-bold">${STATE[9].deadSocket} dead</span>
+              </div>
+              <input type="range" min="0" max="3" value="${STATE[9].deadSocket}" class="w-full accent-accent-amber h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[9].deadSocket = parseInt(this.value); document.getElementById('lbl_l9_dead').innerText = this.value + ' dead'; evaluateLevel(9);">
             </div>
           </div>
         `;
       } else if (lvl === 10) {
         container.innerHTML = `
-          <div class="space-y-3">
-            <div class="text-xs font-semibold text-slate-300">Multi-Model Quorum State (DEC-1791255540404633):</div>
-            <div class="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
-              <span>gemini-gm:</span>
-              <select onchange="STATE[10].voter1 = this.value; evaluateLevel(10);" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-emerald-400">
-                <option value="APPROVE" selected>APPROVE</option>
-                <option value="REJECT">REJECT</option>
-              </select>
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Quorum Consensus Health</span>
+                <span id="lbl_l10_q" class="text-brand-400 font-mono font-bold">${STATE[10].quorumHealthPct}%</span>
+              </div>
+              <input type="range" min="20" max="100" value="${STATE[10].quorumHealthPct}" class="w-full accent-brand-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[10].quorumHealthPct = parseInt(this.value); document.getElementById('lbl_l10_q').innerText = this.value + '%'; evaluateLevel(10);">
             </div>
-            <div class="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
-              <span>orchestra-builder:</span>
-              <select onchange="STATE[10].voter2 = this.value; evaluateLevel(10);" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-rose-400">
-                <option value="TIMEOUT_DEAD" selected>TIMEOUT_DEAD</option>
-                <option value="APPROVE">APPROVE</option>
-              </select>
-            </div>
-            <div class="flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
-              <span>gm:</span>
-              <select onchange="STATE[10].voter3 = this.value; evaluateLevel(10);" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-emerald-400">
-                <option value="APPROVE" selected>APPROVE</option>
-                <option value="REJECT">REJECT</option>
-              </select>
+            <div>
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Deadlock Stall Duration</span>
+                <span id="lbl_l10_stall" class="text-rose-400 font-mono font-bold">${STATE[10].deadlockTimeoutSec} sec</span>
+              </div>
+              <input type="range" min="0" max="120" step="5" value="${STATE[10].deadlockTimeoutSec}" class="w-full accent-rose-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[10].deadlockTimeoutSec = parseInt(this.value); document.getElementById('lbl_l10_stall').innerText = this.value + ' sec'; evaluateLevel(10);">
             </div>
           </div>
         `;
@@ -748,33 +836,35 @@
       STATE[2].preset = val;
       evaluateLevel(2);
     }
-    function handleLvl2Custom(val) {
-      STATE[2].customText = val;
-      evaluateLevel(2);
-    }
 
-    // EVALUATION ENGINE
+    // EVALUATION ENGINE FOR ALL 10 LEVELS
     function evaluateLevel(lvl) {
       let outcome = "", conf = 0, action = "", latency = "280 ms", explanation = "", jsonOutput = {};
 
       if (lvl === 1) {
         const s = STATE[1];
-        const allPass = s.pidLive && s.walDrained && s.huskClean && s.diskHeadroom;
+        const hbOk = s.pidHeartbeat < 2000;
+        const walOk = s.walDelta === 0;
+        const huskOk = s.huskAge === 0;
+        const diskOk = s.diskHeadroomGB >= 10;
+        const allPass = hbOk && walOk && huskOk && diskOk;
+
         outcome = allPass ? "APPROVED" : "REFUSED_FAIL_CLOSED";
         conf = allPass ? 0.994 : 0.999;
         action = allPass ? "spawn_green()" : "abort_swap_precondition()";
         latency = "242 ms";
         explanation = allPass 
-          ? "✓ All 4 invariant checks passed cleanly. Blue session is verified live and ready for zero-downtime swap."
-          : `⚠ Safety Gate Tripped: ${[!s.pidLive ? 'Dead PID' : '', !s.walDrained ? 'Undrained WAL' : '', !s.huskClean ? 'Husk Lock Exists' : '', !s.diskHeadroom ? 'Low Disk' : ''].filter(Boolean).join(', ')}. Aborting to prevent split-brain fleet.`;
+          ? `✓ All 4 invariant checks passed cleanly (Heartbeat: ${s.pidHeartbeat}ms, WAL: 0 delta, Disk: ${s.diskHeadroomGB}GB). Blue session verified live and ready for zero-downtime swap.`
+          : `⚠ Safety Gate Tripped: ${[!hbOk ? 'Heartbeat Stale ('+s.pidHeartbeat+'ms)' : '', !walOk ? 'Undrained WAL ('+s.walDelta+' items)' : '', !huskOk ? 'Husk Lock Active' : '', !diskOk ? 'Low Disk Headroom' : ''].filter(Boolean).join(', ')}. Aborting swap to prevent split-brain fleet.`;
+        
         jsonOutput = {
           level: 1,
           type: "BOOLEAN_PRECONDITION_GATE",
-          checks: {
-            is_canonical_session_live: s.pidLive,
-            is_wal_delta_drained: s.walDrained,
-            is_husk_lock_clear: s.huskClean,
-            has_disk_headroom_10gb: s.diskHeadroom
+          measured_values: {
+            pid_heartbeat_ms: s.pidHeartbeat,
+            wal_delta_queue: s.walDelta,
+            husk_lock_age_sec: s.huskAge,
+            nvme_headroom_gb: s.diskHeadroomGB
           },
           verdict: outcome,
           confidence: conf,
@@ -782,18 +872,20 @@
         };
 
       } else if (lvl === 2) {
-        const p = STATE[2].customText.toLowerCase() || STATE[2].preset;
-        if (p.includes("outage") || p.includes("socket") || p.includes("down")) {
+        const p = STATE[2].preset;
+        const urg = STATE[2].urgencyScore;
+
+        if (p === "outage" || urg >= 9) {
           outcome = "P0_CRITICAL_ALERT";
           conf = 0.988;
           action = "urgent_telegram_push()";
-          explanation = "High-urgency infrastructure failure detected. Bypassing standard queue and alerting Shaw directly on Watch & Telegram.";
-        } else if (p.includes("vote") || p.includes("dec-") || p.includes("congruence")) {
+          explanation = `🚨 P0 Emergency Outage detected (Priority ${urg}/10). Bypassing standard queue and alerting Shaw directly on Watch & Telegram.`;
+        } else if (p === "vote_req") {
           outcome = "CONGRUENCE_VOTE";
           conf = 0.975;
           action = "dispatch_to_consensus_engine()";
-          explanation = "Congruence vote request detected. Dispatching spec to gemini-gm and orchestra-builder for verification.";
-        } else if (p.includes("shaw") || p.includes("menu") || p.includes("answer") || p.includes("option")) {
+          explanation = "Congruence vote request detected on DEC-1791255540404633. Dispatching spec to gemini-gm and orchestra-builder.";
+        } else if (p === "shaw_answer") {
           outcome = "QUESTIONNAIRE_ANSWER";
           conf = 0.991;
           action = "inject_menu_answer()";
@@ -809,6 +901,7 @@
           level: 2,
           type: "MULTIPLE_CHOICE_TRIAGE",
           evaluated_intent: outcome,
+          urgency_priority: urg,
           confidence: conf,
           action_dispatch: action
         };
@@ -848,7 +941,6 @@
         const risk = Math.min(1.0, contextWeightFactor + churnFactor + idleFactor + subagentFactor);
         conf = risk;
 
-        // Update context zone badge in UI if element is present
         const zoneBadge = document.getElementById("lbl_context_zone");
         if (zoneBadge) {
           zoneBadge.innerHTML = contextZone;
@@ -940,35 +1032,24 @@
         };
 
       } else if (lvl === 6) {
-        const raw = STATE[6].command;
-        const words = raw.split(" ");
-        let hazard = false;
-        let sanitized = raw;
+        const s = STATE[6];
+        const isHazard = s.targetSuffix <= 9; // Prefix match collision hazard with 10..14
+        const rawCmd = `tmux kill-session -t P-g${s.targetSuffix}`;
+        const sanitizedCmd = `tmux kill-session -t =P-g${s.targetSuffix}`;
 
-        for (let i = 0; i < words.length; i++) {
-          if (words[i] === "-t" && i + 1 < words.length) {
-            const tgt = words[i + 1];
-            if (!tgt.startsWith("=")) {
-              words[i + 1] = "=" + tgt;
-              hazard = true;
-              sanitized = words.join(" ");
-            }
-          }
-        }
-
-        outcome = hazard ? "COLLISION_PREVENTED" : "VERIFIED_EXACT_SAFE";
+        outcome = isHazard ? "COLLISION_PREVENTED" : "VERIFIED_EXACT_SAFE";
         conf = 0.999;
-        action = hazard ? "auto_rewrite_and_execute()" : "pass_through_exact()";
+        action = isHazard ? "auto_rewrite_and_execute()" : "pass_through_exact()";
         latency = "238 ms";
-        explanation = hazard
-          ? `🚨 Collision Hazard: Bare target detected ('${raw}'). Tmux prefix matching would accidentally kill session prefixes like P-g10! Auto-rewritten by construction to: '${sanitized}'.`
-          : `✓ Exact target confirmed ('${sanitized}'). Safe to execute with zero cross-seat collision hazard.`;
+        explanation = isHazard
+          ? `🚨 Collision Hazard: Target 'P-g${s.targetSuffix}' is a prefix for active sessions P-g${s.targetSuffix}0..P-g${s.targetSuffix}4! Tmux would wipe multiple seats. Pre-tool guard rewritten it to exact target: '${sanitizedCmd}'.`
+          : `✓ Target 'P-g${s.targetSuffix}' has no prefix collision hazards in fleet. Executing with exact target safety.`;
         jsonOutput = {
           level: 6,
           type: "INVISIBLE_TOOL_GUARDRAIL",
-          raw_command: raw,
-          prefix_collision_detected: hazard,
-          sanitized_command: sanitized,
+          raw_command: rawCmd,
+          prefix_collision_detected: isHazard,
+          sanitized_command: sanitizedCmd,
           dispatch: action
         };
 
@@ -1042,24 +1123,21 @@
 
       } else if (lvl === 10) {
         const s = STATE[10];
-        const deadVoter = s.voter1 === "TIMEOUT_DEAD" || s.voter2 === "TIMEOUT_DEAD" || s.voter3 === "TIMEOUT_DEAD";
-        outcome = deadVoter ? "AUTO_RESOLVED_DEADLOCK" : "QUORUM_ACTIVE";
+        const isDeadlock = s.quorumHealthPct < 70 || s.deadlockTimeoutSec >= 30;
+        outcome = isDeadlock ? "AUTO_RESOLVED_DEADLOCK" : "QUORUM_ACTIVE";
         conf = 0.978;
-        action = deadVoter ? "elect_prewarm_green_and_cast()" : "await_standard_votes()";
+        action = isDeadlock ? "elect_prewarm_green_and_cast()" : "await_standard_votes()";
         latency = "295 ms";
-        explanation = deadVoter
-          ? "🤖 Agentic Jev: Dead voter seat detected causing consensus stall on DEC-1791255540404633. Jev autonomously promoted prewarmed green seat and achieved 3/3 consensus!"
-          : "✓ Consensus quorum proceeding normally across active voters.";
+        explanation = isDeadlock
+          ? `🤖 Agentic Jev: Quorum health at ${s.quorumHealthPct}% with ${s.deadlockTimeoutSec}s stall on DEC-1791255540404633. Jev autonomously promoted prewarmed green seat and achieved 3/3 consensus!`
+          : `✓ Consensus quorum proceeding normally at ${s.quorumHealthPct}% health.`;
         jsonOutput = {
           level: 10,
           type: "AGENTIC_JEV_SELF_HEALING",
           decision_id: "DEC-1791255540404633",
-          voters: {
-            "gemini-gm": s.voter1,
-            "orchestra-builder": s.voter2,
-            "gm": s.voter3
-          },
-          self_healing_applied: deadVoter,
+          quorum_health: s.quorumHealthPct + "%",
+          stall_duration_sec: s.deadlockTimeoutSec,
+          self_healing_applied: isDeadlock,
           remediation_dispatch: action
         };
       }
