@@ -563,11 +563,19 @@
         container.innerHTML = `
           <div class="space-y-4">
             <div>
-              <div class="flex justify-between text-xs text-slate-400 mb-1">
+              <div class="flex justify-between items-center text-xs text-slate-400 mb-1">
                 <span>Context Saturation</span>
-                <span id="lbl_context" class="text-brand-400 font-mono font-bold">${STATE[3].contextSat}%</span>
+                <div class="flex items-center gap-2">
+                  <span id="lbl_context_zone" class="px-2 py-0.5 rounded text-[10px] font-mono border"></span>
+                  <span id="lbl_context" class="text-brand-400 font-mono font-bold">${STATE[3].contextSat}%</span>
+                </div>
               </div>
               <input type="range" min="10" max="100" value="${STATE[3].contextSat}" class="w-full accent-brand-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" oninput="STATE[3].contextSat = parseInt(this.value); document.getElementById('lbl_context').innerText = this.value + '%'; evaluateLevel(3);">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
+                <span>&lt;70% (Baseline)</span>
+                <span class="text-amber-400 font-semibold">70-80% (Elevated)</span>
+                <span class="text-rose-400 font-semibold">&gt;80% (Critical High Weight)</span>
+              </div>
             </div>
             <div>
               <div class="flex justify-between text-xs text-slate-400 mb-1">
@@ -807,25 +815,58 @@
 
       } else if (lvl === 3) {
         const s = STATE[3];
-        // Mathematical composite risk score
-        const risk = (0.40 * (s.contextSat / 100)) + 
-                     (0.25 * Math.min(1.0, s.gitChurn / 300)) + 
-                     (0.20 * Math.min(1.0, s.idleSec / 300)) + 
-                     (0.15 * (s.subagents / 5));
+        
+        // Tiered Non-Linear Context Window Weighting Curve
+        let contextWeightFactor = 0;
+        let contextZone = "";
+        let contextBadgeClass = "";
+        
+        if (s.contextSat < 70) {
+          // Normal linear baseline (<70%)
+          contextWeightFactor = (s.contextSat / 70) * 0.35;
+          contextZone = "NORMAL (&lt;70%)";
+          contextBadgeClass = "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
+        } else if (s.contextSat < 80) {
+          // Elevated tier (70-80%): rapid escalation into prewarm territory (0.55 - 0.76)
+          const norm = (s.contextSat - 70) / 10;
+          contextWeightFactor = 0.55 + (norm * 0.21);
+          contextZone = "ELEVATED (70-80%)";
+          contextBadgeClass = "text-amber-400 bg-amber-500/10 border-amber-500/30";
+        } else {
+          // High critical weight (>80%): dominates composite score (0.85 - 1.00)
+          const norm = (s.contextSat - 80) / 20;
+          contextWeightFactor = 0.85 + (norm * 0.15);
+          contextZone = "CRITICAL (&gt;80%)";
+          contextBadgeClass = "text-rose-400 bg-rose-500/10 border-rose-500/30 font-bold";
+        }
+
+        // Auxiliary risk factors
+        const churnFactor = Math.min(1.0, s.gitChurn / 300) * 0.15;
+        const idleFactor = Math.min(1.0, s.idleSec / 300) * 0.10;
+        const subagentFactor = (s.subagents / 5) * 0.08;
+
+        const risk = Math.min(1.0, contextWeightFactor + churnFactor + idleFactor + subagentFactor);
         conf = risk;
+
+        // Update context zone badge in UI if element is present
+        const zoneBadge = document.getElementById("lbl_context_zone");
+        if (zoneBadge) {
+          zoneBadge.innerHTML = contextZone;
+          zoneBadge.className = `px-2 py-0.5 rounded text-[10px] font-mono border ${contextBadgeClass}`;
+        }
 
         if (risk >= 0.75) {
           outcome = "SWAP_MANDATORY";
           action = "schedule_blue_green_swap()";
-          explanation = `🚨 Risk Score: ${(risk*100).toFixed(1)}% (Threshold: 75%). High context saturation (${s.contextSat}%) or diff churn (${s.gitChurn} lines) requires immediate rotation before memory blowout.`;
+          explanation = `🚨 Risk Score: ${(risk*100).toFixed(1)}% (Threshold: 75%). ${s.contextSat >= 80 ? 'CRITICAL CONTEXT OVERRIDE (>80%): Memory exhaustion imminent — forcing immediate swap.' : 'High composite risk requires immediate rotation before memory blowout.'}`;
         } else if (risk >= 0.50) {
           outcome = "PREWARM_GREEN";
           action = "spawn_isolated_green_prewarm()";
-          explanation = `⚡ Risk Score: ${(risk*100).toFixed(1)}%. Prewarming isolated green agent in background to ensure instant handoff readiness.`;
+          explanation = `⚡ Risk Score: ${(risk*100).toFixed(1)}%. ${s.contextSat >= 70 ? 'Context in 70-80% Elevated Tier: Prewarming isolated green agent in background for zero-lag handoff.' : 'Prewarming isolated green agent in background.'}`;
         } else {
           outcome = "HOLD_BLUE";
           action = "noop_maintain_session()";
-          explanation = `✓ Risk Score: ${(risk*100).toFixed(1)}%. Blue agent health is optimal. Maintaining active conversation turn.`;
+          explanation = `✓ Risk Score: ${(risk*100).toFixed(1)}%. Context is in safe baseline zone (<70%). Maintaining active conversation turn.`;
         }
         latency = "284 ms";
         jsonOutput = {
@@ -833,6 +874,8 @@
           type: "COMPOSITE_RISK_SCORE",
           factors: {
             context_saturation_pct: s.contextSat,
+            context_tier_zone: contextZone.replace(/&lt;/g, '<').replace(/&gt;/g, '>'),
+            context_weight_contribution: parseFloat(contextWeightFactor.toFixed(3)),
             git_uncommitted_lines: s.gitChurn,
             idle_duration_seconds: s.idleSec,
             active_subagent_count: s.subagents
